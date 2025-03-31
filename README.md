@@ -44,16 +44,6 @@ jdm license
 ```
 Displays the **MIT License** for JDM CLI.
 
-## Development
-To work on JDM CLI locally:
-```sh
-git clone https://github.com/yourname/jdm-cli.git
-cd jdm-cli
-npm install
-npm link
-```
-This links the CLI globally so you can test it.
-
 ## License
 JDM CLI is licensed under the **MIT License**. Run `jdm license` to view it.
 
