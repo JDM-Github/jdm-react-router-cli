@@ -1,7 +1,7 @@
-module.exports = (name, author = "JDM") => `// Author: ${author}
+module.exports = (name, config={}, author = "JDM") => `// Author: ${author}
 // Created on: ${new Date().toISOString()}
 
-const sequelize = require("../sequelize.js");
+const sequelize = require("./Sequelize.js");
 const { DataTypes } = require("sequelize");
 
 const ${name} = sequelize.define(

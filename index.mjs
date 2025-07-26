@@ -9,6 +9,8 @@ import ora from "ora";
 import { pathToFileURL } from "url";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import inquirer from "inquirer";
+
 
 console.log(
 	chalk.blueBright(`
@@ -258,6 +260,17 @@ async function createFileFromTemplate(
 		process.exit(1);
 	}
 }
+
+function capitalizeFirstLetter(str) {
+	return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function toTitleLike(str) {
+	return str.replace(/(^\w|[A-Z]|\b\w)/g, (match, index) =>
+		index === 0 ? match.toUpperCase() : match
+	);
+}
+
 program
 	.name("jdm")
 	.description(
@@ -265,7 +278,7 @@ program
 			"JDM CLI - Generate setup, Express routers, models, middleware, and more effortlessly."
 		)
 	)
-	.version("1.0.0");
+	.version("1.0.1");
 
 program
 	.command("license")
@@ -286,23 +299,61 @@ program
 		}
 	});
 
-program.command("clean").action(async () => {
-	console.log(chalk.red("🧹 Cleaning project directory..."));
-	await cleanProject();
-	console.log(chalk.green("✅ Project cleaned successfully."));
-});
+
+program
+	.command("clean")
+	.option("-f, --force", "Force clean without confirmation")
+	.action(async (options) => {
+		if (!options.force) {
+			console.log(
+				chalk.red(
+					"⚠️ WARNING: This will permanently delete files and cannot be undone!"
+				)
+			);
+
+			const { confirm } = await inquirer.prompt([
+				{
+					type: "confirm",
+					name: "confirm",
+					message:
+						"Are you sure you want to clean the project directory?",
+					default: false,
+				},
+			]);
+
+			if (!confirm) {
+				console.log(
+					chalk.yellow(
+						"❌ Operation cancelled. No files were deleted."
+					)
+				);
+				return;
+			}
+		} else {
+			console.log(
+				chalk.yellow(
+					"⚠️ Running clean command with --force. No confirmation required."
+				)
+			);
+		}
+
+		console.log(chalk.red("🧹 Cleaning project directory..."));
+		await cleanProject();
+		console.log(chalk.green("✅ Project cleaned successfully."));
+	});
+
 
 program
 	.command("create <type> <name>")
 	.description("Generate a new router, model, or middleware")
 	.action(async (type, name) => {
 		await loadConfig();
-		const validTypes = ["router", "model", "middleware"];
+		const validTypes = ["router", "model", "middleware", "seeder"];
 
 		if (!validTypes.includes(type)) {
 			console.log(
 				chalk.red(
-					`❌ Unknown type: '${type}'. Available types: router, model, middleware`
+					`❌ Unknown type: '${type}'. Available types: router, model, middlewar, seeder`
 				)
 			);
 			process.exit(1);
@@ -318,18 +369,24 @@ program
 			process.exit(1);
 		}
 		const paths = {
-			router: config.folder + config.routes || "backend/routes",
-			model: config.folder + config.models || "backend/models",
+			router: config.folder + "/" + config.routes || "backend/routes",
+			model: config.folder + "/" + config.models || "backend/models",
 			middleware:
-				config.folder + config.middlewares || "backend/middlewares",
+				config.folder + "/" + config.middlewares ||
+				"backend/middlewares",
+			seeder: "seeders"
 		};
 
 		const targetDir = path.join(process.cwd(), paths[type]);
-		const filePath = path.join(targetDir, `${name}.js`);
+		const filePath = path.join(
+			targetDir,
+			`${name}${capitalizeFirstLetter(type)}.js`
+		);
 
 		if (!(await askToOverwrite(filePath))) {
 			await createFile();
 		}
+
 		async function createFile() {
 			const spinner = ora(
 				chalk.yellow(`Creating ${type} '${name}'...`)
@@ -339,25 +396,60 @@ program
 				fs.mkdirSync(targetDir, { recursive: true });
 
 				const templateURL = pathToFileURL(templatePath).href;
-				const generateTemplate = await import(templateURL)
-					.then((mod) => mod.default ?? mod)
-					.catch((err) => {
-						console.error(
-							"❌ Error loading template:",
-							err.message
-						);
-						process.exit(1);
-					});
-
-				const template = generateTemplate(name, author);
-
+				const template = await import(templateURL).then((mod) =>
+					mod.default(name, config, author)
+				);
 				fs.writeFileSync(filePath, template, "utf8");
+
+				if (type === "model") {
+					const modelsFilePath = path.join(targetDir, "Models.js");
+
+					if (fs.existsSync(modelsFilePath)) {
+						let modelsFileContent = fs.readFileSync(
+							modelsFilePath,
+							"utf8"
+						);
+
+						const newModelEntry = `\t${name}: require("./${name}Model.js"),`;
+						if (!modelsFileContent.includes(newModelEntry)) {
+							modelsFileContent = modelsFileContent.replace(
+								/};\s*$/,
+								`${newModelEntry}\n};`
+							);
+
+							fs.writeFileSync(
+								modelsFilePath,
+								modelsFileContent,
+								"utf8"
+							);
+							spinner.succeed(
+								chalk.green(`✅ ${name} added to Models.js`)
+							);
+						} else {
+							spinner.info(
+								chalk.blue(
+									`ℹ️  ${name} already exists in Models.js`
+								)
+							);
+						}
+					} else {
+						const defaultModels = `module.exports = {\n\tsequelize: require("./Sequelize.js"),\n\t${name}: require("./${name}Model.js"),\n};`;
+						fs.writeFileSync(modelsFilePath, defaultModels, "utf8");
+						spinner.succeed(
+							chalk.green(
+								`✅ Models.js created and ${name} added`
+							)
+						);
+					}
+				}
 
 				spinner.succeed(
 					chalk.green(
 						`✅ ${
 							type.charAt(0).toUpperCase() + type.slice(1)
-						} '${name}' created at ${paths[type]}/${name}.js`
+						} '${name}' created at ${
+							paths[type]
+						}/${name}${capitalizeFirstLetter(type)}.js`
 					)
 				);
 			} catch (err) {
@@ -422,6 +514,7 @@ program
 			config.models || "models",
 			config.middlewares || "middlewares",
 			config.routes || "routes",
+			"service",
 			"lib",
 			"utils",
 			"helpers",
@@ -453,19 +546,25 @@ program
 		);
 		await createFileFromTemplate(
 			"template/templates/model-template.js",
-			path.join(projectRoot, config.models || "models", "models.js"),
+			path.join(projectRoot, config.models || "models", "Models.js"),
+			{ author },
+			force
+		);
+		await createFileFromTemplate(
+			"template/templates/router-template.js",
+			path.join(projectRoot, config.routes || "routes", "Routers.js"),
 			{ author },
 			force
 		);
 		await createFileFromTemplate(
 			"template/templates/sequelize-template.js",
-			path.join(projectRoot, config.models || "models", "sequelize.js"),
+			path.join(projectRoot, config.models || "models", "Sequelize.js"),
 			{ author },
 			force
 		);
 		await createFileFromTemplate(
 			"template/templates/migrate-template.js",
-			path.join(process.cwd(), config.folder || "backend", "migrate.js"),
+			path.join(process.cwd(), config.folder || "backend", "Migrate.js"),
 			{ config, author },
 			force
 		);

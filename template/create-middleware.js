@@ -1,4 +1,4 @@
-module.exports = (name, author = "JDM") => `// Author: ${author}
+module.exports = (name, config={}, author = "JDM") => `// Author: ${author}
 // Created on: ${new Date().toISOString()}
 
 module.exports = function ${name}Middleware(req, res, next) {

@@ -7,7 +7,7 @@ module.exports = ({ config = {}, author = "JDM" }) => {
 // Created on: ${new Date().toISOString()}
 
 require("dotenv").config();
-const { sequelize } = require("./${models}/models.js");
+const { sequelize } = require("./${models}/Models.js");
 
 async function migrateAll() {
     try {

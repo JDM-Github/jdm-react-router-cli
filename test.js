@@ -1,16 +1,8 @@
-module.exports = ({ config = {}, author = "JDM" }) => {
-	const { models = "models", routes = "routes" } = config;
-
-	return `
-// Author: ${author}
-// Created on: ${new Date().toISOString()}
-
 const express = require("express");
 const cors = require("cors");
 const serverless = require("serverless-http");
 const path = require("path");
-const { sequelize } = require("../${models}/Models.js");
-const routes = require("../${routes}}/Routes.js");
+const { sequelize, User, AdminUser } = require("../models/models.js");
 const bodyParser = require("body-parser");
 
 const app = express();
@@ -19,15 +11,18 @@ const router = express.Router();
 // -------------------------------------------------------------------------------
 // CORS CONFIGURATION
 // -------------------------------------------------------------------------------
-const DEVELOPMENT = false;
+DEVELOPMENT = false;
 if (DEVELOPMENT) {
 	app.use(
 		cors({
-			origin: "",
+			origin: "http://localhost:5173",
 			credentials: true,
 			optionSuccessStatus: 200,
 		})
 	);
+	router.get("*", (req, res) => {
+		res.sendFile(path.join(__dirname, "../client/build"), "index.html");
+	});
 } else {
 	app.use(cors());
 }
@@ -42,7 +37,13 @@ router.get("/reset", async (req, res) => {
 	await sequelize.sync({ force: true });
 	res.send("Database reset successful.");
 });
-router.use("/", routes);
+
+
+// EXAMPLE WHEN I CREATE A ROUTER, IT WILL AUTOMATICALLY ADD IT HERE
+router.use("/adminusers", require("../routes/AdminRouter.js"));
+router.use("/users", require("../routes/UserRouter.js"));
+router.use("/plants", require("../routes/PlantRouter.js"));
+router.use("/diseases", require("../routes/DiseaseRouter.js"));
 
 // -------------------------------------------------------------------------------
 // APP MIDDLEWARE
@@ -54,5 +55,3 @@ app.use(express.static(path.join(__dirname, "../client/build")));
 // Set base path for serverless functions
 app.use("/.netlify/functions/api", router);
 module.exports.handler = serverless(app);
-`;
-};

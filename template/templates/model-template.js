@@ -3,6 +3,6 @@ module.exports = (author = "JDM") => `
 // Created on: ${new Date().toISOString()}
 
 module.exports = {
-	sequelize: require("./sequelize.js"),
+	sequelize: require("./Sequelize.js"),
 };
 `;
